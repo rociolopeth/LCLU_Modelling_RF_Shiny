@@ -1,0 +1,9 @@
+# Included Data
+
+This folder contains the preprocessed and trained datasets used in the Shiny app. These files were generated from the NASA ARSET course example and allow running the interactive app without needing the original raw imagery.
+
+**Files included:**
+- `y17.rds` – 2017 raster
+- `y24.rds` – 2024 raster
+- `pred17.rds` – Predicted LCLU classes for 2017
+- `pred24.rds` – Predicted LCLU classes for 2024
