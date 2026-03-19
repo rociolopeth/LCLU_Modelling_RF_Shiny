@@ -1,0 +1,156 @@
+---
+title: "R Notebook LCLU Classification  NASA"
+output: html_notebook
+---
+First we will load all the needed libraries
+
+```{r libs, results='hide', message=FALSE, warning=FALSE}
+library(randomForest)
+library(randomForestExplainer)
+library(tidyverse)
+library(terra)
+library(tidyterra)
+library(patchwork)
+set.seed(20260226)
+```
+
+# Part 2: Supervised Classification
+
+## Building a Random Forest Model
+
+We will now read the imagery data for 2017 and 2024 using the rast function and specify which of the HLS bands correspond to the Red, Green, and Blue wavelengths. In the case of HLS data, those are bands 4, 3, and 2 since band 1 is the Coastal Aerosol band.
+
+
+
+```{r rast_data}
+# Read the multiband rasters for 2017 and 2024
+y17 <- rast('data_NASA/HLS_2017_multiband.tif') %>%
+  RGB(c(4,3,2)) # Assign the RGB bands per the HLS band numbering system
+y24 <- rast('data_NASA/HLS_2024_multiband.tif') %>%
+  RGB(c(4,3,2))
+```
+
+We can create a spatial raster collection to store both the 2017 and 2024 imagery data in the same object.
+
+
+```{r rast_collection}
+# Create a spatial raster collection containing the rasters for both years
+hls <- sprc(y17, y24)
+```
+
+```{r plot}
+
+# Create and store a plot for each 2017 and 2024 
+p17 <- ggplot() +
+  geom_spatraster_rgb(data = hls[1], stretch = 'hist') +
+  ggtitle('2017') +
+  theme_void()
+
+p24 <- ggplot() +
+  geom_spatraster_rgb(data = hls[2], stretch = 'hist') +
+  ggtitle('2024') +
+  theme_void()
+```
+### Load Training Data
+
+We can now load the training points I have already prepared for this training. The points are associated with the image from 2017 since we will build our model on the 2017 data before applying it to the 2024 data.
+
+```{r load_training_pts}
+tpts <- vect('data_NASA/training_points_2017.gpkg') # These are points on the 2017 data
+
+tpts <- na.omit(tpts) # Remove any points without data
+```
+
+
+```{r plot_training_pts}
+# Set a color ramp
+okabe <- c("#D55E00", "#009E73", "#F5C710", "#56B4E9", "#0072B2", "#E69F00", "#CC79A7")
+
+# Plot the points over the data
+p17 +
+  geom_spatvector(data = tpts,
+                  mapping = aes(fill=lc_class),
+                  size=4,
+                  shape=21,
+                  color='black',
+                  alpha=0.7) +
+  scale_fill_discrete("LC Class", type=okabe) +
+  NULL
+```
+
+### Merging Training Data with Imagery
+
+```{r}
+tpts_refl <- extract(y17, tpts, bind = TRUE)
+
+tpts_refl$lc_class <- as.factor(tpts_refl$lc_class)
+```
+
+Here's a quick check of our combined training data to make sure everything worked as expected.
+
+```{r}
+head(tpts_refl)
+```
+
+### Training the Model
+
+```{r rf_train}
+rf17 <- randomForest(formula = lc_class ~ .,
+                     data = tpts_refl,
+                     proximity = T,
+                     importance = T,
+                     ntree = 100,
+                     do.trace = F)
+```
+
+#### Applying the trained RF model
+
+```{r rf_apply, results='hide', message=FALSE, warning=FALSE}
+pred17 <- predict(hls[1], rf17)
+pred24 <- predict(hls[2], rf17)
+```
+
+#### Plotting the results function
+```{r rf_plots}
+plot_lc <- function(pred_raster, title_text) {
+  ggplot() +
+    geom_spatraster(data = pred_raster) +
+    scale_fill_manual(values = okabe, name = "LC Class") +
+    ggtitle(title_text) +
+    theme_void()
+}
+```
+#### Plotting the results
+```{r rf_plots_2}
+plot_pred17 <- plot_lc(pred17, "Predicted 2017")
+plot_pred24 <- plot_lc(pred24, "Predicted 2024")
+
+plot_pred17 | plot_pred24
+```
+
+```{r save_results} 
+
+extent_crop <- ext(
+  799980,   # xmin (igual)
+  860000,   # xmax recortado a la derecha
+  -295000,  # ymin recortado aún más arriba (eliminando parte inferior)
+  -200000   # ymax (igual)
+)
+
+# Recortar todos los rasters
+#y17_crop <- crop(y17, extent_crop)
+#y24_crop <- crop(y24, extent_crop)
+#pred17_crop <- crop(pred17, extent_crop)
+#pred24_crop <- crop(pred24, extent_crop)
+
+# Guardar los archivos recortados
+#saveRDS(y17_crop, "y17_crop.rds")
+#saveRDS(y24_crop, "y24_crop.rds")
+#saveRDS(pred17_crop, "pred17_crop.rds")
+#aveRDS(pred24_crop, "pred24_crop.rds")
+
+saveRDS(y17, "y17.rds")
+saveRDS(pred17, "pred17.rds")
+saveRDS(y24, "y24.rds")
+saveRDS(pred24, "pred24.rds")
+```
