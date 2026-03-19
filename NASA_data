@@ -1,0 +1,8 @@
+# NASA Data
+
+This folder contains the original multiband HLS imagery and training points provided in the NASA course example for LCLU classification.  
+- **HLS_2017_multiband.tif** – Multiband imagery for 2017  
+- **HLS_2024_multiband.tif** – Multiband imagery for 2024  
+- **training_points_2017.gpkg** – Training points for 2017 used to build the Random Forest model  
+
+These files are included to reproduce the classification workflow and support the Shiny app development.
